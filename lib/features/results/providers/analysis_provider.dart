@@ -38,11 +38,29 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
       if (data != null) {
         state = state.copyWith(data: data, isLoading: false);
       } else {
-        state = state.copyWith(
-          isLoading: false,
-          error:
-              'Failed to fetch data for $ticker. Please check the ticker symbol.',
-        );
+        // Try quick raw checks to provide a clearer error message
+        String reason = 'Failed to fetch data for $ticker.';
+        try {
+          final stockRaw = await _apiService.getStockData(ticker);
+          if (stockRaw != null) {
+            reason =
+                'Received raw stock data for $ticker but failed to process it.';
+          } else {
+            final cryptoRaw = await _apiService.getCryptoData(ticker);
+            if (cryptoRaw != null) {
+              reason =
+                  'Received raw crypto data for $ticker but failed to process it.';
+            } else {
+              reason =
+                  'No data found for $ticker. Please check the ticker symbol (e.g. AAPL for Apple).';
+            }
+          }
+        } catch (e) {
+          reason =
+              'Failed to fetch data for $ticker due to an API error. ${e.toString()}';
+        }
+
+        state = state.copyWith(isLoading: false, error: reason);
       }
     } catch (e) {
       state = state.copyWith(

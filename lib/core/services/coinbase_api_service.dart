@@ -184,19 +184,53 @@ class CoinbaseApiService {
             meta?['previousClose']?.toDouble() ??
             meta?['chartPreviousClose']?.toDouble();
 
-        // Get historical prices for trend analysis
+        // Get historical OHLC data for candlestick charts
         final indicators = quote['indicators'];
         final quoteData = indicators?['quote'];
-        final closePrices = quoteData != null && quoteData.isNotEmpty
-            ? quoteData[0]['close'] as List?
-            : null;
-
+        List<Map<String, dynamic>> candlestickData = [];
         List<double> historicalPrices = [];
-        if (closePrices != null) {
-          historicalPrices = closePrices
-              .where((price) => price != null)
-              .map((price) => (price as num).toDouble())
-              .toList();
+
+        if (quoteData != null && quoteData.isNotEmpty) {
+          final quoteItem = quoteData[0];
+          final openPrices = quoteItem['open'] as List?;
+          final highPrices = quoteItem['high'] as List?;
+          final lowPrices = quoteItem['low'] as List?;
+          final closePrices = quoteItem['close'] as List?;
+
+          // Create candlestick data and extract close prices for backward compatibility
+          if (openPrices != null &&
+              highPrices != null &&
+              lowPrices != null &&
+              closePrices != null) {
+            final maxLength = [
+              openPrices.length,
+              highPrices.length,
+              lowPrices.length,
+              closePrices.length,
+            ].reduce((a, b) => a < b ? a : b);
+            for (int i = 0; i < maxLength; i++) {
+              if (openPrices[i] != null &&
+                  highPrices[i] != null &&
+                  lowPrices[i] != null &&
+                  closePrices[i] != null) {
+                final closePrice = (closePrices[i] as num).toDouble();
+                candlestickData.add({
+                  'open': (openPrices[i] as num).toDouble(),
+                  'high': (highPrices[i] as num).toDouble(),
+                  'low': (lowPrices[i] as num).toDouble(),
+                  'close': closePrice,
+                  'volume':
+                      0, // Yahoo Finance doesn't provide volume in this endpoint
+                });
+                historicalPrices.add(closePrice);
+              }
+            }
+          }
+        }
+
+        print('Candlestick data count: ${candlestickData.length}');
+        if (candlestickData.isNotEmpty) {
+          print('Sample candlestick: ${candlestickData.last}');
         }
 
         // If we have historical prices but no current price, use the last historical price
@@ -230,8 +264,10 @@ class CoinbaseApiService {
           'currentPrice': currentPrice,
           'previousClose': previousClose,
           'historicalPrices': historicalPrices,
+          'candlestickData': candlestickData,
           'symbol': ticker,
           'name': meta?['symbol'] ?? ticker,
+          'currency': meta?['currency'] ?? 'USD',
         };
       } else {
         print('Failed with status code: ${response.statusCode}');
@@ -289,6 +325,8 @@ class CoinbaseApiService {
       price: currentPrice.toStringAsFixed(2),
       prediction: prediction.toStringAsFixed(2),
       sentiment: sentiment,
+      historicalPrices: [], // Crypto API doesn't provide historical prices
+      currency: 'USD',
     );
   }
 
@@ -305,12 +343,21 @@ class CoinbaseApiService {
     final currentPrice = stockData['currentPrice'] as double;
     final previousClose = stockData['previousClose'] as double;
     final historicalPrices = stockData['historicalPrices'] as List<double>;
+    final candlestickData =
+        stockData['candlestickData'] as List<Map<String, dynamic>>;
+    final currency = stockData['currency'] as String? ?? 'USD';
 
-    // Calculate prediction based on historical prices
-    final prediction = _calculatePredictionFromHistory(
-      currentPrice,
-      historicalPrices,
-    );
+    // Try external predictor first (tunneled service). Fallback to local heuristic.
+    double? externalPrediction;
+    if (historicalPrices.isNotEmpty) {
+      externalPrediction = await _callExternalPredictor(
+        historicalPrices,
+        periods: 1,
+      );
+    }
+    final double predictionValue =
+        externalPrediction ??
+        _calculatePredictionFromHistory(currentPrice, historicalPrices);
 
     // Calculate sentiment based on price movement
     final sentiment = _calculateSentimentFromHistory(
@@ -321,9 +368,47 @@ class CoinbaseApiService {
 
     return AnalysisData(
       price: currentPrice.toStringAsFixed(2),
-      prediction: prediction.toStringAsFixed(2),
+      prediction: predictionValue.toStringAsFixed(2),
       sentiment: sentiment,
+      historicalPrices: historicalPrices,
+      candlestickData: candlestickData,
+      currency: currency,
     );
+  }
+
+  /// Calls an external predictor service (configured via PREDICTOR_URL in .env).
+  /// Returns the predicted next value or null on error/unavailable.
+  Future<double?> _callExternalPredictor(
+    List<double> history, {
+    int periods = 1,
+  }) async {
+    try {
+      final url =
+          dotenv.env['PREDICTOR_URL'] ?? 'http://127.0.0.1:5000/predict';
+      final resp = await http
+          .post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'historical': history, 'periods': periods}),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (resp.statusCode == 200) {
+        final Map<String, dynamic> body =
+            jsonDecode(resp.body) as Map<String, dynamic>;
+        final preds = (body['predictions'] as List<dynamic>?)
+            ?.map((e) => (e as num).toDouble())
+            .toList();
+        if (preds != null && preds.isNotEmpty) {
+          return preds.first;
+        }
+      } else {
+        print('Predictor returned ${resp.statusCode}: ${resp.body}');
+      }
+    } catch (e) {
+      print('Error calling predictor service: $e');
+    }
+    return null;
   }
 
   /// Calculate prediction based on recent percent changes (for crypto)

@@ -44,11 +44,11 @@ class _HomeScreenState extends State<HomeScreen> {
               TextField(
                 controller: _tickerController,
                 decoration: const InputDecoration(
-                  hintText: 'Enter ticker symbol (e.g., AAPL)',
+                  hintText: 'Enter ticker symbol (e.g., AAPL, RELIANCE.NS)',
                   labelText: 'Ticker Symbol',
                 ),
                 textCapitalization: TextCapitalization.characters,
-                maxLength: 5,
+                maxLength: 15,
               ),
               const SizedBox(height: 32),
               SizedBox(
