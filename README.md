@@ -285,15 +285,15 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
----
+<!-- ---
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+--- -->
 
-## 📞 Contact
+<!-- ## 📞 Contact
 
 **Subhrajyoti Sahoo**
 
@@ -302,7 +302,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🐙 GitHub: [github.com/subhrajyoti5](https://github.com/subhrajyoti5)
 - 🌐 Portfolio: [your-portfolio.com](https://your-portfolio.com)
 
----
+--- -->
 
 <div align="center">
 
