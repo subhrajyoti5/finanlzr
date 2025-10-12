@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:finanlzr/features/results/providers/analysis_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:finanlzr/core/services/screener_api_service.dart';
+import 'package:finanlzr/features/results/screens/detailed_insights_screen.dart';
 
 class ResultsScreen extends ConsumerStatefulWidget {
   const ResultsScreen({super.key, required this.ticker});
@@ -16,6 +18,7 @@ class ResultsScreen extends ConsumerStatefulWidget {
 
 class _ResultsScreenState extends ConsumerState<ResultsScreen> {
   bool _hasFetched = false;
+  TimePeriod _selectedTimePeriod = TimePeriod.month;
 
   @override
   void initState() {
@@ -29,7 +32,34 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
   Future<void> _fetchData() async {
     if (_hasFetched) return;
     _hasFetched = true;
-    ref.read(analysisProvider.notifier).fetchAnalysis(widget.ticker);
+    ref
+        .read(analysisProvider.notifier)
+        .fetchAnalysis(widget.ticker, period: _selectedTimePeriod);
+  }
+
+  void _onTimePeriodChanged(TimePeriod period) {
+    setState(() {
+      _selectedTimePeriod = period;
+    });
+    // Refetch data with new time period
+    ref
+        .read(analysisProvider.notifier)
+        .fetchAnalysis(widget.ticker, period: period);
+  }
+
+  String _getTimePeriodLabel(TimePeriod period) {
+    switch (period) {
+      case TimePeriod.day:
+        return '1D';
+      case TimePeriod.week:
+        return '1W';
+      case TimePeriod.month:
+        return '1M';
+      case TimePeriod.threeYear:
+        return '3Y';
+      case TimePeriod.lifetime:
+        return 'All';
+    }
   }
 
   @override
@@ -49,12 +79,27 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            tooltip: 'Detailed Insights',
+            onPressed: () => _navigateToDetailedInsights(context),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: _buildContent(analysisState),
         ),
+      ),
+    );
+  }
+
+  void _navigateToDetailedInsights(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DetailedInsightsScreen(ticker: widget.ticker),
       ),
     );
   }
@@ -227,243 +272,280 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Price Trend (30 Days)',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Text('Price Trend', style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            // Time period filter buttons
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: TimePeriod.values.map((period) {
+                  final isSelected = period == _selectedTimePeriod;
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(_getTimePeriodLabel(period)),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        if (selected) {
+                          _onTimePeriodChanged(period);
+                        }
+                      },
+                      backgroundColor: Colors.grey.shade100,
+                      selectedColor: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.2),
+                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
             const SizedBox(height: 12),
-            Container(
-              height: 300,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+            SingleChildScrollView(
+              key: ValueKey(
+                'chart_${_selectedTimePeriod}_${historicalPrices.length}',
               ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // compute sensible axis intervals based on data range
-                  final xCount = historicalPrices.length;
-                  final currencySymbol = (data.currency ?? 'USD') == 'INR'
-                      ? '₹'
-                      : '\$';
+              scrollDirection: Axis.horizontal,
+              child: Container(
+                height: 300,
+                width:
+                    MediaQuery.of(context).size.width *
+                    1.5, // Allow horizontal scrolling
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // compute sensible axis intervals based on data range
+                    final xCount = historicalPrices.length;
+                    final currencySymbol = (data.currency ?? 'USD') == 'INR'
+                        ? '₹'
+                        : '\$';
 
-                  final minYRaw = historicalPrices.reduce(
-                    (a, b) => a < b ? a : b,
-                  );
-                  final maxYRaw = historicalPrices.reduce(
-                    (a, b) => a > b ? a : b,
-                  );
-                  final yPadding = (maxYRaw - minYRaw) * 0.05;
-                  var minY = minYRaw - yPadding;
-                  var maxY = maxYRaw + yPadding;
+                    final minYRaw = historicalPrices.reduce(
+                      (a, b) => a < b ? a : b,
+                    );
+                    final maxYRaw = historicalPrices.reduce(
+                      (a, b) => a > b ? a : b,
+                    );
+                    final yPadding = (maxYRaw - minYRaw) * 0.05;
+                    var minY = minYRaw - yPadding;
+                    var maxY = maxYRaw + yPadding;
 
-                  // compute x interval trying to show ~4 labels across the axis
-                  final rawRange = ((xCount - 1) <= 0)
-                      ? 1.0
-                      : (xCount - 1).toDouble();
-                  final xInterval = (rawRange / 4.0).clamp(1.0, rawRange);
-                  final ySteps = ((maxY - minY) / 4.0).clamp(
-                    1e-6,
-                    double.infinity,
-                  );
+                    // compute x interval trying to show ~4 labels across the axis
+                    final rawRange = ((xCount - 1) <= 0)
+                        ? 1.0
+                        : (xCount - 1).toDouble();
+                    final xInterval = (rawRange / 4.0).clamp(1.0, rawRange);
+                    final ySteps = ((maxY - minY) / 4.0).clamp(
+                      1e-6,
+                      double.infinity,
+                    );
 
-                  // predicted price (if available) - show as next point
-                  final rawPrediction = data.prediction?.toString() ?? '';
-                  final predictedValue =
-                      double.tryParse(rawPrediction) ?? double.nan;
-                  final hasPrediction = !predictedValue.isNaN;
-                  final predictedX = xCount; // next index after historical data
+                    // predicted price (if available) - show as next point
+                    final rawPrediction = data.prediction?.toString() ?? '';
+                    final predictedValue =
+                        double.tryParse(rawPrediction) ?? double.nan;
+                    final hasPrediction = !predictedValue.isNaN;
+                    final predictedX =
+                        xCount; // next index after historical data
 
-                  // expand vertical range if prediction outside current range
-                  if (hasPrediction) {
-                    if (predictedValue < minY) {
-                      minY =
-                          predictedValue -
-                          (yPadding > 0 ? yPadding : predictedValue * 0.02);
+                    // expand vertical range if prediction outside current range
+                    if (hasPrediction) {
+                      if (predictedValue < minY) {
+                        minY =
+                            predictedValue -
+                            (yPadding > 0 ? yPadding : predictedValue * 0.02);
+                      }
+                      if (predictedValue > maxY) {
+                        maxY =
+                            predictedValue +
+                            (yPadding > 0 ? yPadding : predictedValue * 0.02);
+                      }
                     }
-                    if (predictedValue > maxY) {
-                      maxY =
-                          predictedValue +
-                          (yPadding > 0 ? yPadding : predictedValue * 0.02);
-                    }
-                  }
 
-                  final maxX = hasPrediction
-                      ? predictedX + 0.5
-                      : (xCount - 1).toDouble() + 0.5;
+                    final maxX = hasPrediction
+                        ? predictedX + 0.5
+                        : (xCount - 1).toDouble() + 0.5;
 
-                  return LineChart(
-                    LineChartData(
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: true,
-                        horizontalInterval: ySteps,
-                        verticalInterval: xInterval,
-                        getDrawingHorizontalLine: (value) => FlLine(
-                          color: Colors.grey.withOpacity(0.18),
-                          strokeWidth: 1,
-                        ),
-                        getDrawingVerticalLine: (value) => FlLine(
-                          color: Colors.grey.withOpacity(0.12),
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        rightTitles: AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        topTitles: AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 40,
-                            interval: xInterval,
-                            getTitlesWidget: (value, meta) {
-                              final idx = value.round();
-                              final maxIndex = hasPrediction
-                                  ? predictedX
-                                  : (xCount - 1);
-                              if (idx < 0 || idx > maxIndex)
-                                return const SizedBox.shrink();
-
-                              // pick a few meaningful indices: first, quartiles, mid, last (and predicted)
-                              final candidates = <int>{
-                                0,
-                                (xCount / 4).floor(),
-                                (xCount / 2).floor(),
-                                ((3 * xCount) / 4).floor(),
-                                xCount - 1,
-                              }..removeWhere((i) => i < 0 || i > xCount - 1);
-                              if (hasPrediction) candidates.add(predictedX);
-
-                              if (!candidates.contains(idx))
-                                return const SizedBox.shrink();
-
-                              final label = (hasPrediction && idx == predictedX)
-                                  ? 'Pred'
-                                  : 'Day ${idx + 1}';
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6.0),
-                                child: Text(
-                                  label,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              );
-                            },
+                    return LineChart(
+                      LineChartData(
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: true,
+                          horizontalInterval: ySteps,
+                          verticalInterval: xInterval,
+                          getDrawingHorizontalLine: (value) => FlLine(
+                            color: Colors.grey.withOpacity(0.18),
+                            strokeWidth: 1,
+                          ),
+                          getDrawingVerticalLine: (value) => FlLine(
+                            color: Colors.grey.withOpacity(0.12),
+                            strokeWidth: 1,
                           ),
                         ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            interval: ySteps,
-                            reservedSize: 64,
-                            getTitlesWidget: (value, meta) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: Text(
-                                  '$currencySymbol${value.toStringAsFixed(0)}',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              );
-                            },
+                        titlesData: FlTitlesData(
+                          show: true,
+                          rightTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
                           ),
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(
-                          color: Colors.grey.withOpacity(0.22),
-                        ),
-                      ),
-                      // small horizontal padding so endpoint markers don't sit on the card border
-                      minX: -0.5,
-                      maxX: maxX,
-                      minY: minY,
-                      maxY: maxY,
-                      lineBarsData: [
-                        // historical series
-                        LineChartBarData(
-                          spots: historicalPrices.asMap().entries.map((entry) {
-                            return FlSpot(entry.key.toDouble(), entry.value);
-                          }).toList(),
-                          isCurved: true,
-                          color: Theme.of(context).primaryColor,
-                          barWidth: 3,
-                          isStrokeCapRound: true,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: Theme.of(
-                              context,
-                            ).primaryColor.withOpacity(0.06),
+                          topTitles: AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
                           ),
-                        ),
-                        // predicted connector (last historical -> predicted)
-                        if (hasPrediction)
-                          LineChartBarData(
-                            spots: [
-                              FlSpot(
-                                (xCount - 1).toDouble(),
-                                historicalPrices.last,
-                              ),
-                              FlSpot(predictedX.toDouble(), predictedValue),
-                            ],
-                            isCurved: false,
-                            color: Colors.deepOrange,
-                            barWidth: 2,
-                            isStrokeCapRound: true,
-                            dotData: FlDotData(
-                              show: true,
-                              getDotPainter: (spot, percent, bar, index) {
-                                // highlight only the predicted point
-                                if (spot.x == predictedX.toDouble()) {
-                                  return FlDotCirclePainter(
-                                    radius: 5,
-                                    color: Colors.deepOrange,
-                                    strokeWidth: 2,
-                                    strokeColor: Colors.white,
-                                  );
-                                }
-                                // keep last historical dot small/transparent
-                                return FlDotCirclePainter(
-                                  radius: 0,
-                                  color: Colors.transparent,
-                                  strokeWidth: 0,
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 40,
+                              interval: xInterval,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.round();
+                                final maxIndex = hasPrediction
+                                    ? predictedX
+                                    : (xCount - 1);
+                                if (idx < 0 || idx > maxIndex)
+                                  return const SizedBox.shrink();
+
+                                // pick a few meaningful indices: first, quartiles, mid, last (and predicted)
+                                final candidates = <int>{
+                                  0,
+                                  (xCount / 4).floor(),
+                                  (xCount / 2).floor(),
+                                  ((3 * xCount) / 4).floor(),
+                                  xCount - 1,
+                                }..removeWhere((i) => i < 0 || i > xCount - 1);
+                                if (hasPrediction) candidates.add(predictedX);
+
+                                if (!candidates.contains(idx))
+                                  return const SizedBox.shrink();
+
+                                final label =
+                                    (hasPrediction && idx == predictedX)
+                                    ? 'Pred'
+                                    : 'Day ${idx + 1}';
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6.0),
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
                                 );
                               },
                             ),
-                            belowBarData: BarAreaData(show: false),
                           ),
-                      ],
-                      lineTouchData: LineTouchData(
-                        touchTooltipData: LineTouchTooltipData(
-                          getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((spot) {
-                              return LineTooltipItem(
-                                '${currencySymbol}${spot.y.toStringAsFixed(2)}',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              );
-                            }).toList();
-                          },
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: ySteps,
+                              reservedSize: 64,
+                              getTitlesWidget: (value, meta) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: Text(
+                                    '$currencySymbol${value.toStringAsFixed(0)}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
-                        handleBuiltInTouches: true,
+                        borderData: FlBorderData(
+                          show: true,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.22),
+                          ),
+                        ),
+                        // small horizontal padding so endpoint markers don't sit on the card border
+                        minX: -0.5,
+                        maxX: maxX,
+                        minY: minY,
+                        maxY: maxY,
+                        lineBarsData: [
+                          // historical series
+                          LineChartBarData(
+                            spots: historicalPrices.asMap().entries.map((
+                              entry,
+                            ) {
+                              return FlSpot(entry.key.toDouble(), entry.value);
+                            }).toList(),
+                            isCurved: true,
+                            color: Theme.of(context).primaryColor,
+                            barWidth: 3,
+                            isStrokeCapRound: true,
+                            dotData: FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: Theme.of(
+                                context,
+                              ).primaryColor.withOpacity(0.06),
+                            ),
+                          ),
+                          // predicted connector (last historical -> predicted)
+                          if (hasPrediction)
+                            LineChartBarData(
+                              spots: [
+                                FlSpot(
+                                  (xCount - 1).toDouble(),
+                                  historicalPrices.last,
+                                ),
+                                FlSpot(predictedX.toDouble(), predictedValue),
+                              ],
+                              isCurved: false,
+                              color: Colors.red,
+                              barWidth: 4,
+                              isStrokeCapRound: true,
+                              dotData: FlDotData(
+                                show: true,
+                                getDotPainter: (spot, percent, bar, index) {
+                                  // highlight only the predicted point
+                                  if (spot.x == predictedX.toDouble()) {
+                                    return FlDotCirclePainter(
+                                      radius: 6,
+                                      color: Colors.red,
+                                      strokeWidth: 3,
+                                      strokeColor: Colors.white,
+                                    );
+                                  }
+                                  // keep last historical dot small/transparent
+                                  return FlDotCirclePainter(
+                                    radius: 0,
+                                    color: Colors.transparent,
+                                    strokeWidth: 0,
+                                  );
+                                },
+                              ),
+                              belowBarData: BarAreaData(show: false),
+                            ),
+                        ],
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((spot) {
+                                return LineTooltipItem(
+                                  '${currencySymbol}${spot.y.toStringAsFixed(2)}',
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
+                          handleBuiltInTouches: true,
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ],

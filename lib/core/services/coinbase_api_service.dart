@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:finanlzr/features/results/models/analysis_data.dart';
+import 'package:finanlzr/core/services/screener_api_service.dart';
 
 class CoinbaseApiService {
   static const String _coinMarketCapUrl =
@@ -141,10 +142,18 @@ class CoinbaseApiService {
 
   /// Fetches stock data from Yahoo Finance
   /// Works with stock tickers: AAPL, GOOGL, RELIANCE.NS, TCS.NS, etc.
-  Future<Map<String, dynamic>?> getStockData(String ticker) async {
+  Future<Map<String, dynamic>?> getStockData(
+    String ticker, {
+    TimePeriod period = TimePeriod.month,
+  }) async {
     try {
-      print('Fetching stock data for: $ticker');
-      final url = Uri.parse('$_yahooFinanceUrl/$ticker?range=1mo&interval=1d');
+      print('Fetching stock data for: $ticker with period: $period');
+
+      // Get range and interval based on period
+      final rangeInterval = _getYahooFinanceRangeInterval(period);
+      final url = Uri.parse(
+        '$_yahooFinanceUrl/$ticker?range=${rangeInterval['range']}&interval=${rangeInterval['interval']}',
+      );
       print('URL: $url');
 
       final response = await http
@@ -280,9 +289,55 @@ class CoinbaseApiService {
     }
   }
 
+  /// Gets current price for a ticker (stock or crypto)
+  Future<Map<String, dynamic>?> getCurrentPrice(String ticker) async {
+    try {
+      print('Getting current price for: $ticker');
+
+      if (_isCrypto(ticker)) {
+        // For crypto, use CoinMarketCap
+        final cryptoData = await getCryptoData(ticker);
+        if (cryptoData != null) {
+          final price = cryptoData['price'];
+          final change24h = cryptoData['percent_change_24h'];
+          return {
+            'price': price,
+            'changePercent': change24h != null
+                ? double.tryParse(change24h.toString())
+                : null,
+            'currency': 'USD',
+          };
+        }
+      } else {
+        // For stocks, use Yahoo Finance
+        final stockData = await getStockData(ticker);
+        if (stockData != null) {
+          final price = stockData['currentPrice'];
+          final previousClose = stockData['previousClose'];
+          double? changePercent;
+          if (price != null && previousClose != null && previousClose != 0) {
+            changePercent = ((price - previousClose) / previousClose) * 100;
+          }
+          return {
+            'price': price,
+            'changePercent': changePercent,
+            'currency': stockData['currency'] ?? 'USD',
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting current price for $ticker: $e');
+      return null;
+    }
+  }
+
   /// Fetches analysis data - automatically detects stock vs crypto
-  Future<AnalysisData?> getAnalysisData(String ticker) async {
-    print('getAnalysisData called for: $ticker');
+  Future<AnalysisData?> getAnalysisData(
+    String ticker, {
+    TimePeriod period = TimePeriod.month,
+  }) async {
+    print('getAnalysisData called for: $ticker with period: $period');
 
     // Detect if it's a crypto or stock
     if (_isCrypto(ticker)) {
@@ -290,7 +345,7 @@ class CoinbaseApiService {
       return _getCryptoAnalysis(ticker);
     } else {
       print('Detected as stock, using Yahoo Finance');
-      return _getStockAnalysis(ticker);
+      return _getStockAnalysis(ticker, period: period);
     }
   }
 
@@ -331,8 +386,11 @@ class CoinbaseApiService {
   }
 
   /// Fetches stock analysis data from Yahoo Finance
-  Future<AnalysisData?> _getStockAnalysis(String ticker) async {
-    final stockData = await getStockData(ticker);
+  Future<AnalysisData?> _getStockAnalysis(
+    String ticker, {
+    TimePeriod period = TimePeriod.month,
+  }) async {
+    final stockData = await getStockData(ticker, period: period);
 
     if (stockData == null) {
       print('Stock data is null');
@@ -482,5 +540,21 @@ class CoinbaseApiService {
     if (dayChange > 1 || trendChange > 2) return 'Bullish';
     if (dayChange < -1 || trendChange < -2) return 'Bearish';
     return 'Neutral';
+  }
+
+  /// Maps TimePeriod to Yahoo Finance range and interval parameters
+  Map<String, String> _getYahooFinanceRangeInterval(TimePeriod period) {
+    switch (period) {
+      case TimePeriod.day:
+        return {'range': '1d', 'interval': '5m'};
+      case TimePeriod.week:
+        return {'range': '5d', 'interval': '1h'};
+      case TimePeriod.month:
+        return {'range': '1mo', 'interval': '1d'};
+      case TimePeriod.threeYear:
+        return {'range': '3y', 'interval': '1mo'};
+      case TimePeriod.lifetime:
+        return {'range': 'max', 'interval': '1mo'};
+    }
   }
 }

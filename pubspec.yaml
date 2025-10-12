@@ -44,8 +44,14 @@ dependencies:
   # HTTP client
   http: ^1.2.1
 
+  # HTML parsing for web scraping
+  html: ^0.15.4
+
   # Environment variables
   flutter_dotenv: ^5.1.0
+
+  # Local storage
+  shared_preferences: ^2.2.3
 
   # Charts for data visualization
   fl_chart: ^0.68.0

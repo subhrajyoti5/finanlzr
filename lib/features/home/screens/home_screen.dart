@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   final TextEditingController _tickerController = TextEditingController();
 
   @override
@@ -24,38 +25,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 600;
+
+    return SafeArea(
+      child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          padding: EdgeInsets.symmetric(
+            horizontal: isSmallScreen ? 24.0 : screenWidth * 0.1,
+            vertical: 16.0,
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'finanlzr',
-                style: Theme.of(context).textTheme.headlineLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
                 'AI Stock Analysis Prototype',
                 style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
-              TextField(
-                controller: _tickerController,
-                decoration: const InputDecoration(
-                  hintText: 'Enter ticker symbol (e.g., AAPL, RELIANCE.NS)',
-                  labelText: 'Ticker Symbol',
+              SizedBox(
+                width: isSmallScreen ? double.infinity : 400,
+                child: TextField(
+                  controller: _tickerController,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter ticker symbol (e.g., AAPL, RELIANCE.NS)',
+                    labelText: 'Ticker Symbol',
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 15,
                 ),
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 15,
               ),
               const SizedBox(height: 32),
               SizedBox(
-                width: double.infinity,
+                width: isSmallScreen ? double.infinity : 400,
                 child: ElevatedButton(
                   onPressed: _analyzeTicker,
                   child: const Text('Analyze'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: isSmallScreen ? double.infinity : 400,
+                child: OutlinedButton(
+                  onPressed: () => context.go('/portfolio'),
+                  child: const Text('My Portfolio'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: isSmallScreen ? double.infinity : 400,
+                child: OutlinedButton(
+                  onPressed: () => context.go('/comparison'),
+                  child: const Text('Compare Stocks'),
                 ),
               ),
             ],
