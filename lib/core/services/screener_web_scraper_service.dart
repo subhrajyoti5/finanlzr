@@ -352,18 +352,19 @@ class ScreenerWebScraperService {
           final headerText = headerCells
               .map((c) => c.text.trim().toLowerCase())
               .join(' ');
-          
+
           print('📊 Quarterly table header: "$headerText"');
 
           // More lenient validation - just check if it's not empty and looks like financial data
-          if (headerText.isNotEmpty && (headerText.contains('sales') ||
-              headerText.contains('revenue') ||
-              headerText.contains('quarter') ||
-              headerText.contains('mar') ||
-              headerText.contains('sep') ||
-              headerText.contains('dec') ||
-              headerText.contains('jun') ||
-              headerCells.length >= 4)) {
+          if (headerText.isNotEmpty &&
+              (headerText.contains('sales') ||
+                  headerText.contains('revenue') ||
+                  headerText.contains('quarter') ||
+                  headerText.contains('mar') ||
+                  headerText.contains('sep') ||
+                  headerText.contains('dec') ||
+                  headerText.contains('jun') ||
+                  headerCells.length >= 4)) {
             // Process data rows
             for (int i = 1; i < rows.length && i <= 12; i++) {
               // Limit to 12 quarters
@@ -825,19 +826,20 @@ class ScreenerWebScraperService {
           final headerText = firstCells
               .map((c) => c.text.trim().toLowerCase())
               .join(' ');
-          
+
           print('👥 Shareholding table header: "$headerText"');
 
           // More lenient validation - check if it looks like shareholding data
-          if (headerText.isNotEmpty && (headerText.contains('promoter') ||
-              headerText.contains('fii') ||
-              headerText.contains('dii') ||
-              headerText.contains('public') ||
-              headerText.contains('mar') ||
-              headerText.contains('sep') ||
-              headerText.contains('dec') ||
-              headerText.contains('jun') ||
-              firstCells.length >= 3)) {
+          if (headerText.isNotEmpty &&
+              (headerText.contains('promoter') ||
+                  headerText.contains('fii') ||
+                  headerText.contains('dii') ||
+                  headerText.contains('public') ||
+                  headerText.contains('mar') ||
+                  headerText.contains('sep') ||
+                  headerText.contains('dec') ||
+                  headerText.contains('jun') ||
+                  firstCells.length >= 3)) {
             for (final row in rows.skip(1)) {
               // Skip header
               final cells = row.querySelectorAll('td, th');
