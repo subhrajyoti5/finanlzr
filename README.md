@@ -210,7 +210,7 @@ flutter build web --release          # Web
 
 ---
 
-## 📸 Screenshots
+<!-- ## 📸 Screenshots
 
 <div align="center">
   <img src="screenshots/home.png" width="250" alt="Home Screen"/>
@@ -218,7 +218,7 @@ flutter build web --release          # Web
   <img src="screenshots/insights.png" width="250" alt="Insights Screen"/>
 </div>
 
----
+--- -->
 
 ## 🔧 Technical Challenges Solved
 
